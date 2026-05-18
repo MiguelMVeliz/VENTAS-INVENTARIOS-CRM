@@ -1,0 +1,210 @@
+const VentaList = {
+    template: `
+        <div>
+            <h2>📋 Historial de Ventas</h2>
+            
+            <!-- Barra de Herramientas -->
+            <div class="flex-between mb-20">
+                <div style="display: flex; gap: 10px;">
+                    <select v-model="filtros.estado" @change="aplicarFiltros" style="width: 200px;">
+                        <option value="">Todos los estados</option>
+                        <option value="Completada">Completadas</option>
+                        <option value="Pendiente">Pendientes</option>
+                        <option value="Cancelada">Canceladas</option>
+                    </select>
+                    <input 
+                        v-model="filtros.fecha" 
+                        type="date" 
+                        @change="aplicarFiltros"
+                        style="width: 200px;"
+                    />
+                </div>
+                <router-link to="/ventas/nueva">
+                    <button class="btn-success">💰 Nueva Venta</button>
+                </router-link>
+            </div>
+
+            <!-- Tabla de Ventas -->
+            <table>
+                <thead>
+                    <tr>
+                        <th>Factura</th>
+                        <th>Fecha</th>
+                        <th>Vendedor</th>
+                        <th>Cliente</th>
+                        <th>Productos</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="venta in ventas" :key="venta.numeroFactura">
+                        <td><strong>{{ venta.numeroFactura }}</strong></td>
+                        <td>{{ venta.fecha }}</td>
+                        <td>{{ venta.nombreVendedor || venta.idVendedor }}</td>
+                        <td>{{ venta.nombreCliente || venta.idCliente }}</td>
+                        <td>
+                            <span class="badge badge-info" style="margin: 2px;" 
+                                  v-for="linea in venta.lineas" :key="linea.codigoProducto">
+                                {{ linea.codigoProducto }} ({{ linea.cantidad }})
+                            </span>
+                        </td>
+                        <td><strong style="color: #e94560;">{{ formatoMoneda(venta.total) }}</strong></td>
+                        <td>
+                            <span :class="'badge ' + getBadgeClass(venta.estado)">
+                                {{ venta.estado }}
+                            </span>
+                        </td>
+                        <td>
+                            <button @click="verDetalle(venta)" class="btn-secondary">👁️</button>
+                            <button v-if="venta.estado !== 'Cancelada'" 
+                                    @click="anularVenta(venta.numeroFactura)" 
+                                    class="btn-danger">
+                                ❌
+                            </button>
+                        </td>
+                    </tr>
+                    <tr v-if="ventas.length === 0">
+                        <td colspan="8" class="text-center">No hay ventas registradas</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Modal Detalle -->
+            <div v-if="ventaDetalle" class="modal-overlay" @click.self="ventaDetalle = null">
+                <div class="modal">
+                    <h3>📄 Detalle de Venta</h3>
+                    <p><strong>Factura:</strong> {{ ventaDetalle.numeroFactura }}</p>
+                    <p><strong>Fecha:</strong> {{ ventaDetalle.fecha }}</p>
+                    <p><strong>Vendedor:</strong> {{ ventaDetalle.nombreVendedor || ventaDetalle.idVendedor }}</p>
+                    <p><strong>Cliente:</strong> {{ ventaDetalle.nombreCliente || ventaDetalle.idCliente }}</p>
+                    <p><strong>Estado:</strong> {{ ventaDetalle.estado }}</p>
+                    
+                    <h4 style="margin-top: 20px;">Productos:</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                                <th>Precio Unit.</th>
+                                <th>Descuento</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="linea in ventaDetalle.lineas" :key="linea.codigoProducto">
+                                <td>{{ linea.nombreProducto || linea.codigoProducto }}</td>
+                                <td>{{ linea.cantidad }}</td>
+                                <td>{{ formatoMoneda(linea.precioUnitario) }}</td>
+                                <td>{{ formatoMoneda(linea.descuento) }}</td>
+                                <td><strong>{{ formatoMoneda(linea.subtotal) }}</strong></td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="text-right"><strong>Total:</strong></td>
+                                <td><strong style="color: #e94560; font-size: 1.2em;">
+                                    {{ formatoMoneda(ventaDetalle.total) }}
+                                </strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button @click="ventaDetalle = null" class="btn-secondary">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    setup(props, { emit }) {
+        const ventas = Vue.ref([]);
+        const ventaDetalle = Vue.ref(null);
+        const filtros = Vue.reactive({
+            estado: '',
+            fecha: ''
+        });
+
+        const cargarVentas = async () => {
+            try {
+                const response = await api.listarVentas(filtros);
+                if (response.success) {
+                    ventas.value = response.data;
+                }
+            } catch (error) {
+                emit('notificar', {
+                    mensaje: 'Error al cargar ventas: ' + error.message,
+                    tipo: 'error'
+                });
+            }
+        };
+
+        const aplicarFiltros = () => {
+            cargarVentas();
+        };
+
+        const verDetalle = async (venta) => {
+            try {
+                const response = await api.obtenerVenta(venta.numeroFactura);
+                if (response.success) {
+                    ventaDetalle.value = response.data;
+                }
+            } catch (error) {
+                emit('notificar', {
+                    mensaje: 'Error al obtener detalle: ' + error.message,
+                    tipo: 'error'
+                });
+            }
+        };
+
+        const anularVenta = async (numeroFactura) => {
+            if (!confirm('¿Está seguro de anular esta venta? Se revertirá el inventario.')) return;
+            
+            try {
+                const response = await api.anularVenta(numeroFactura);
+                if (response.success) {
+                    emit('notificar', {
+                        mensaje: 'Venta anulada correctamente',
+                        tipo: 'warning'
+                    });
+                    await cargarVentas();
+                }
+            } catch (error) {
+                emit('notificar', {
+                    mensaje: 'Error al anular venta: ' + error.message,
+                    tipo: 'error'
+                });
+            }
+        };
+
+        const formatoMoneda = (valor) => {
+            return new Intl.NumberFormat('es-GT', {
+                style: 'currency',
+                currency: 'GTQ'
+            }).format(valor || 0);
+        };
+
+        const getBadgeClass = (estado) => {
+            const clases = {
+                'Completada': 'badge-success',
+                'Pendiente': 'badge-warning',
+                'Cancelada': 'badge-danger'
+            };
+            return clases[estado] || 'badge-info';
+        };
+
+        Vue.onMounted(cargarVentas);
+
+        return {
+            ventas,
+            ventaDetalle,
+            filtros,
+            aplicarFiltros,
+            verDetalle,
+            anularVenta,
+            formatoMoneda,
+            getBadgeClass
+        };
+    }
+};
