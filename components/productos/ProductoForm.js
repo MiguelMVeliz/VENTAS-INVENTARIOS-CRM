@@ -17,7 +17,7 @@ const ProductoForm = {
                     <label>Código:</label>
                     <input 
                         v-model="formData.codigo" 
-                        required 
+                         
                         :disabled="modoEdicion"
                         placeholder="Ej: P009"
                     />
@@ -109,7 +109,7 @@ const ProductoForm = {
         }, { deep: true });
 
         const validarFormulario = () => {
-            if (!formData.codigo || !formData.nombre) {
+            if ( !formData.nombre) {
                 alert('Complete los campos requeridos: Código y Nombre');
                 return false;
             }

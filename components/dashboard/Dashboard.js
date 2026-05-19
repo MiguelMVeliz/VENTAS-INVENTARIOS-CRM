@@ -117,6 +117,7 @@ const Dashboard = {
         const getBadgeClass = (estado) => {
             const clases = {
                 'Completada': 'badge-success',
+                'Pagada': 'badge-success', 
                 'Pendiente': 'badge-warning',
                 'Cancelada': 'badge-danger'
             };
