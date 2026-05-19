@@ -1,35 +1,11 @@
-// Clase para manejar todas las peticiones a la API
 class ApiService {
     constructor() {
-        this.baseUrl = CONFIG.API_BASE_URL;
-        this.timeout = CONFIG.REQUEST_TIMEOUT;
-        this.useMock = true; 
-        this.initMockData();
+        this.baseUrl = "http://10.201.243.13/api_crm/api.php";
+        this.timeout = 10000; // 10 segundos de espera
+        
+        this.useMock = false; 
     }
 
-    initMockData() {
-        if (!localStorage.getItem('api_usuarios')) {
-            localStorage.setItem('api_usuarios', JSON.stringify([
-                { id: "U001", nombre: "María García López", email: "maria@email.com", telefono: "555-0101", tipo: "vendedor", comision: 5, activo: true },
-                { id: "U002", nombre: "Carlos Rodríguez", email: "carlos@email.com", telefono: "555-0102", tipo: "vendedor", comision: 7, activo: true },
-                { id: "U003", nombre: "Ana Martínez", email: "ana@email.com", telefono: "555-0103", tipo: "cliente", direccion: "Calle 123", categoria: "VIP", activo: true },
-                { id: "U004", nombre: "Pedro Sánchez", email: "pedro@email.com", telefono: "555-0104", tipo: "cliente", direccion: "Av. 456", categoria: "Regular", activo: true }
-            ]));
-        }
-        if (!localStorage.getItem('api_productos')) {
-            localStorage.setItem('api_productos', JSON.stringify([
-                { codigo: "P001", nombre: "Laptop Pro", descripcion: "Laptop 15.6\"", precioCosto: 800, precioVenta: 1200, stock: 25, categoria: "Electrónicos", proveedor: "TechSupply" },
-                { codigo: "P002", nombre: "Monitor 27\"", descripcion: "Monitor 4K", precioCosto: 350, precioVenta: 550, stock: 40, categoria: "Electrónicos", proveedor: "DisplayMasters" },
-                { codigo: "P003", nombre: "Teclado Mecánico", descripcion: "Teclado RGB", precioCosto: 60, precioVenta: 99.99, stock: 100, categoria: "Periféricos", proveedor: "GamingGear" }
-            ]));
-        }
-        if (!localStorage.getItem('api_ventas')) {
-            localStorage.setItem('api_ventas', JSON.stringify([]));
-        }
-        if (!localStorage.getItem('api_movimientos')) {
-            localStorage.setItem('api_movimientos', JSON.stringify([]));
-        }
-    }
 
     async request(endpoint, type, data = {}, method = 'POST') {
         if (this.useMock) {
@@ -40,7 +16,9 @@ class ApiService {
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
         try {
-            const url = `${this.baseUrl}${endpoint}`;
+            // Se construye la URL con el parámetro endpoint requerido por tu api.php
+            const urlWithEndpoint = `${this.baseUrl}?endpoint=${endpoint}`;
+            
             let options = {
                 method: method,
                 signal: controller.signal,
@@ -51,248 +29,94 @@ class ApiService {
             };
 
             if (method === 'GET') {
+                // Para GET, concatenamos 'type' y los datos adicionales a la URL
                 const params = new URLSearchParams({ type, ...data });
-                const response = await fetch(`${url}?${params.toString()}`, options);
+                const response = await fetch(`${urlWithEndpoint}&${params.toString()}`, options);
                 clearTimeout(timeoutId);
                 return await response.json();
             } else {
+                // Para POST, enviamos 'type' y los datos en el cuerpo del JSON
                 options.body = JSON.stringify({ type, ...data });
-                const response = await fetch(url, options);
+                const response = await fetch(urlWithEndpoint, options);
                 clearTimeout(timeoutId);
                 return await response.json();
             }
         } catch (error) {
             clearTimeout(timeoutId);
-            throw new Error(`Error de conexión: ${error.message}`);
+            console.error("Error en ApiService:", error.message);
+            throw new Error(`Error de conexión al servidor (10.201.243.13): ${error.message}`);
         }
     }
 
-    // Simulador de API para desarrollo
-    mockRequest(endpoint, type, data) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                let response = { success: true, message: 'Operación exitosa' };
-                
-                switch(endpoint) {
-                    case CONFIG.ENDPOINTS.USUARIOS:
-                        response = this.mockUsuarios(type, data);
-                        break;
-                    case CONFIG.ENDPOINTS.PRODUCTOS:
-                        response = this.mockProductos(type, data);
-                        break;
-                    case CONFIG.ENDPOINTS.VENTAS:
-                        response = this.mockVentas(type, data);
-                        break;
-                    case CONFIG.ENDPOINTS.INVENTARIO:
-                        response = this.mockInventario(type, data);
-                        break;
-                    case CONFIG.ENDPOINTS.DASHBOARD:
-                        response = this.mockDashboard();
-                        break;
-                }
-                
-                resolve(response);
-            }, 300);
-        });
-    }
+    // --- MÉTODOS PÚBLICOS DE LA API ---
 
-    mockUsuarios(type, data) {
-        let usuarios = JSON.parse(localStorage.getItem('api_usuarios') || '[]');
-        
-        switch(type) {
-            case CONFIG.OPERATIONS.LISTAR_USUARIOS:
-                return { success: true, data: usuarios };
-            
-            case CONFIG.OPERATIONS.AGREGAR_USUARIO:
-                usuarios.push(data);
-                localStorage.setItem('api_usuarios', JSON.stringify(usuarios));
-                return { success: true, message: 'Usuario creado', data: data };
-            
-            case CONFIG.OPERATIONS.EDITAR_USUARIO:
-                const index = usuarios.findIndex(u => u.id === data.id);
-                if (index >= 0) usuarios[index] = data;
-                localStorage.setItem('api_usuarios', JSON.stringify(usuarios));
-                return { success: true, message: 'Usuario actualizado', data: data };
-            
-            case CONFIG.OPERATIONS.ELIMINAR_USUARIO:
-                usuarios = usuarios.filter(u => u.id !== data.id);
-                localStorage.setItem('api_usuarios', JSON.stringify(usuarios));
-                return { success: true, message: 'Usuario eliminado' };
-            
-            default:
-                return { success: true, data: usuarios };
-        }
-    }
-
-    mockProductos(type, data) {
-        let productos = JSON.parse(localStorage.getItem('api_productos') || '[]');
-        
-        switch(type) {
-            case CONFIG.OPERATIONS.LISTAR_PRODUCTOS:
-                return { success: true, data: productos };
-            
-            case CONFIG.OPERATIONS.AGREGAR_PRODUCTO:
-                data.stock = data.stock || 0;
-                productos.push(data);
-                localStorage.setItem('api_productos', JSON.stringify(productos));
-                return { success: true, message: 'Producto creado', data: data };
-            
-            case CONFIG.OPERATIONS.EDITAR_PRODUCTO:
-                const index = productos.findIndex(p => p.codigo === data.codigo);
-                if (index >= 0) productos[index] = data;
-                localStorage.setItem('api_productos', JSON.stringify(productos));
-                return { success: true, message: 'Producto actualizado', data: data };
-            
-            case CONFIG.OPERATIONS.ELIMINAR_PRODUCTO:
-                productos = productos.filter(p => p.codigo !== data.codigo);
-                localStorage.setItem('api_productos', JSON.stringify(productos));
-                return { success: true, message: 'Producto eliminado' };
-            
-            default:
-                return { success: true, data: productos };
-        }
-    }
-
-    mockVentas(type, data) {
-        let ventas = JSON.parse(localStorage.getItem('api_ventas') || '[]');
-        
-        switch(type) {
-            case CONFIG.OPERATIONS.LISTAR_VENTAS:
-                return { success: true, data: ventas };
-            
-            case CONFIG.OPERATIONS.REGISTRAR_VENTA:
-                data.fecha = new Date().toLocaleString();
-                ventas.unshift(data);
-                localStorage.setItem('api_ventas', JSON.stringify(ventas));
-                
-                // Actualizar stock
-                let productos = JSON.parse(localStorage.getItem('api_productos') || '[]');
-                data.lineas.forEach(linea => {
-                    const prod = productos.find(p => p.codigo === linea.codigoProducto);
-                    if (prod) {
-                        prod.stock = Math.max(0, prod.stock - linea.cantidad);
-                    }
-                });
-                localStorage.setItem('api_productos', JSON.stringify(productos));
-                
-                return { success: true, message: 'Venta registrada', data: data };
-            
-            default:
-                return { success: true, data: ventas };
-        }
-    }
-
-    mockInventario(type, data) {
-        let movimientos = JSON.parse(localStorage.getItem('api_movimientos') || '[]');
-        let productos = JSON.parse(localStorage.getItem('api_productos') || '[]');
-        
-        switch(type) {
-            case CONFIG.OPERATIONS.LISTAR_MOVIMIENTOS:
-                return { success: true, data: movimientos };
-            
-            case CONFIG.OPERATIONS.AGREGAR_ENTRADA:
-                data.id = Date.now();
-                data.fecha = new Date().toLocaleString();
-                data.tipo = 'entrada';
-                movimientos.unshift(data);
-                localStorage.setItem('api_movimientos', JSON.stringify(movimientos));
-                
-                const prodEntrada = productos.find(p => p.codigo === data.codigoProducto);
-                if (prodEntrada) {
-                    prodEntrada.stock += data.cantidad;
-                    localStorage.setItem('api_productos', JSON.stringify(productos));
-                }
-                
-                return { success: true, message: 'Entrada registrada', data: data };
-            
-            default:
-                return { success: true, data: movimientos };
-        }
-    }
-
-    mockDashboard() {
-        const usuarios = JSON.parse(localStorage.getItem('api_usuarios') || '[]');
-        const productos = JSON.parse(localStorage.getItem('api_productos') || '[]');
-        const ventas = JSON.parse(localStorage.getItem('api_ventas') || '[]');
-        
-        return {
-            success: true,
-            data: {
-                estadisticas: {
-                    usuariosActivos: usuarios.filter(u => u.activo).length,
-                    totalProductos: productos.length,
-                    ventasMes: ventas.reduce((sum, v) => sum + (v.total || 0), 0),
-                    productosBajos: productos.filter(p => p.stock < 10).length
-                },
-                ultimasVentas: ventas.slice(0, 5),
-                productosBajos: productos.filter(p => p.stock < 10)
-            }
-        };
-    }
-
-    // Métodos públicos
+    // Usuarios (CRM)
     async listarUsuarios(filtros = {}) {
-        return this.request(CONFIG.ENDPOINTS.USUARIOS, CONFIG.OPERATIONS.LISTAR_USUARIOS, filtros, 'GET');
+        return this.request('usuarios', 'listar_usuarios', filtros, 'GET');
     }
 
     async guardarUsuario(usuario) {
-        const operacion = usuario.id && JSON.parse(localStorage.getItem('api_usuarios') || '[]').find(u => u.id === usuario.id) 
-            ? CONFIG.OPERATIONS.EDITAR_USUARIO 
-            : CONFIG.OPERATIONS.AGREGAR_USUARIO;
-        return this.request(CONFIG.ENDPOINTS.USUARIOS, operacion, usuario, 'POST');
+        // La lógica de si es EDITAR o AGREGAR se puede manejar por la presencia de ID
+        const operacion = usuario.id ? 'editar_usuario' : 'agregar_usuario';
+        return this.request('usuarios', operacion, usuario, 'POST');
     }
 
     async eliminarUsuario(id) {
-        return this.request(CONFIG.ENDPOINTS.USUARIOS, CONFIG.OPERATIONS.ELIMINAR_USUARIO, { id }, 'POST');
+        return this.request('usuarios', 'eliminar_usuario', { id }, 'POST');
     }
 
+    // Productos (Inventarios)
     async listarProductos(filtros = {}) {
-        return this.request(CONFIG.ENDPOINTS.PRODUCTOS, CONFIG.OPERATIONS.LISTAR_PRODUCTOS, filtros, 'GET');
+        return this.request('productos', 'listar_productos', filtros, 'GET');
     }
 
     async guardarProducto(producto) {
-        const operacion = producto.codigo && JSON.parse(localStorage.getItem('api_productos') || '[]').find(p => p.codigo === producto.codigo)
-            ? CONFIG.OPERATIONS.EDITAR_PRODUCTO 
-            : CONFIG.OPERATIONS.AGREGAR_PRODUCTO;
-        return this.request(CONFIG.ENDPOINTS.PRODUCTOS, operacion, producto, 'POST');
+        const operacion = producto.codigo ? 'editar_producto' : 'agregar_producto';
+        return this.request('productos', operacion, producto, 'POST');
     }
 
     async eliminarProducto(codigo) {
-        return this.request(CONFIG.ENDPOINTS.PRODUCTOS, CONFIG.OPERATIONS.ELIMINAR_PRODUCTO, { codigo }, 'POST');
+        return this.request('productos', 'eliminar_producto', { codigo }, 'POST');
     }
 
+    // Ventas (CRM)
     async listarVentas(filtros = {}) {
-        return this.request(CONFIG.ENDPOINTS.VENTAS, CONFIG.OPERATIONS.LISTAR_VENTAS, filtros, 'GET');
+        return this.request('ventas', 'listar_ventas', filtros, 'GET');
     }
 
     async obtenerVenta(numeroFactura) {
-        return this.request(CONFIG.ENDPOINTS.VENTAS, CONFIG.OPERATIONS.OBTENER_VENTA, { numeroFactura }, 'GET');
+        return this.request('ventas', 'obtener_venta', { numeroFactura }, 'GET');
     }
 
     async registrarVenta(venta) {
-        return this.request(CONFIG.ENDPOINTS.VENTAS, CONFIG.OPERATIONS.REGISTRAR_VENTA, venta, 'POST');
+        return this.request('ventas', 'registrar_venta', venta, 'POST');
     }
 
     async anularVenta(numeroFactura) {
-        return this.request(CONFIG.ENDPOINTS.VENTAS, CONFIG.OPERATIONS.ANULAR_VENTA, { numeroFactura }, 'POST');
+        return this.request('ventas', 'anular_venta', { numeroFactura }, 'POST');
     }
 
+    // Inventario (Movimientos)
     async listarMovimientos(filtros = {}) {
-        return this.request(CONFIG.ENDPOINTS.INVENTARIO, CONFIG.OPERATIONS.LISTAR_MOVIMIENTOS, filtros, 'GET');
+        return this.request('inventario', 'listar_movimientos', filtros, 'GET');
     }
 
     async registrarEntrada(movimiento) {
-        return this.request(CONFIG.ENDPOINTS.INVENTARIO, CONFIG.OPERATIONS.AGREGAR_ENTRADA, movimiento, 'POST');
+        return this.request('inventario', 'agregar_entrada', movimiento, 'POST');
     }
 
     async registrarSalida(movimiento) {
-        return this.request(CONFIG.ENDPOINTS.INVENTARIO, CONFIG.OPERATIONS.AGREGAR_SALIDA, movimiento, 'POST');
+        return this.request('inventario', 'agregar_salida', movimiento, 'POST');
     }
 
+    // Dashboard
     async obtenerEstadisticas() {
-        return this.request(CONFIG.ENDPOINTS.DASHBOARD, CONFIG.OPERATIONS.OBTENER_ESTADISTICAS, {}, 'GET');
+        return this.request('dashboard', 'obtener_estadisticas', {}, 'GET');
+    }
+
+    initMockData() {
+        console.log("ApiService: Conectado a base de datos real. MockData omitido.");
     }
 }
 
-// Crear instancia global
 const api = new ApiService();
